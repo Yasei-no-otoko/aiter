@@ -9,14 +9,24 @@ from unittest import mock
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 JIT_UTILS = os.path.join(REPO_ROOT, "aiter", "jit", "utils")
+CK_FMHA_ROOT = os.path.join(
+    REPO_ROOT, "3rdparty", "composable_kernel", "example", "ck_tile", "01_fmha"
+)
 sys.path.insert(0, JIT_UTILS)
+sys.path.insert(0, CK_FMHA_ROOT)
 
-from build_targets import get_build_targets_env  # noqa: E402
+from build_targets import GFX_MAP, get_build_targets_env  # noqa: E402
 from blob_gen import windows_blob_gen_argv  # noqa: E402
+import cpp_extension  # noqa: E402
 from mha_recipes import _ck_targets_flag_for_arch  # noqa: E402
+from codegen.ops.fmha_fwd import get_factory as get_fwd_factory  # noqa: E402
+from codegen.ops.fmha_fwd_splitkv import (  # noqa: E402
+    get_factory as get_splitkv_factory,
+)
 
 
 WINDOWS_RDNA_TARGETS = {
+    "gfx1030": 40,
     "gfx1100": 96,
     "gfx1101": 60,
     "gfx1102": 32,
@@ -27,6 +37,53 @@ WINDOWS_RDNA_TARGETS = {
 
 
 class TestWindowsRDNACKTargets(unittest.TestCase):
+    def test_ck_fmha_factories_select_gfx1030_software_mma(self):
+        for factory in (
+            get_fwd_factory("gfx1030"),
+            get_splitkv_factory("gfx1030"),
+        ):
+            self.assertEqual(factory.arch.name, "gfx1030")
+            self.assertEqual(factory.arch.tag, "ck_tile::gfx103_t")
+
+    def test_jit_rocm_flags_prefer_explicit_gpu_archs(self):
+        with mock.patch.dict(
+            os.environ,
+            {"GPU_ARCHS": "gfx1030", "PYTORCH_ROCM_ARCH": ""},
+            clear=False,
+        ):
+            self.assertEqual(
+                cpp_extension._get_rocm_arch_flags(),
+                ["--offload-arch=gfx1030", "-fno-gpu-rdc"],
+            )
+
+    def test_windows_msvc_compiler_check_does_not_invoke_cl_dash_v(self):
+        with (
+            mock.patch.object(
+                cpp_extension.shutil,
+                "which",
+                return_value=r"C:\Visual Studio\VC\Tools\MSVC\bin\cl.exe",
+            ),
+            mock.patch.object(
+                cpp_extension.os.path,
+                "realpath",
+                side_effect=lambda path: path,
+            ),
+            mock.patch.object(
+                cpp_extension.subprocess,
+                "check_output",
+                side_effect=AssertionError("cl -v must not be invoked on Windows"),
+            ),
+        ):
+            self.assertTrue(cpp_extension.check_compiler_ok_for_platform("cl"))
+            self.assertEqual(
+                cpp_extension.get_compiler_abi_compatibility_and_version("cl"),
+                (True, cpp_extension.Version("0.0.0")),
+            )
+
+    def test_jit_arch_registry_contains_each_rdna_target(self):
+        registered_archs = set(GFX_MAP.values())
+        self.assertTrue(WINDOWS_RDNA_TARGETS.keys() <= registered_archs)
+
     def test_offline_build_target_defaults(self):
         for gfx, cu_num in WINDOWS_RDNA_TARGETS.items():
             with self.subTest(gfx=gfx), mock.patch.dict(

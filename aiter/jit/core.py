@@ -23,6 +23,7 @@ from packaging.version import Version, parse
 this_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, f"{this_dir}/utils/")
 from chip_info import get_gfx, get_gfx_list, get_gfx_runtime  # noqa: E402
+from build_targets import GFX_MAP  # noqa: E402
 from cpp_extension import (  # noqa: E402
     LIB_EXT,
     _jit_compile,
@@ -466,27 +467,8 @@ if multiprocessing.current_process().name == "MainProcess":
 def validate_and_update_archs():
     archs = os.getenv("GPU_ARCHS", "native").split(";")
     archs = [arch.strip() for arch in archs]
-    # List of allowed architectures
-    allowed_archs = [
-        "native",
-        "gfx90a",
-        "gfx940",
-        "gfx941",
-        "gfx942",
-        "gfx1100",
-        "gfx1101",
-        "gfx1102",
-        "gfx1103",
-        "gfx1150",
-        "gfx1151",
-        "gfx1152",
-        "gfx1153",
-        "gfx1200",
-        "gfx1201",
-        "gfx1250",
-        "gfx950",
-        "gfx1250",
-    ]
+    # Keep JIT validation in sync with the canonical build-target registry.
+    allowed_archs = set(GFX_MAP.values())
 
     # Validate if each element in archs is in allowed_archs
     assert all(

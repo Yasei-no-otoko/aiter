@@ -26,6 +26,7 @@ GFX_MAP = {
     16: "gfx1200",
     17: "gfx1201",
     18: "gfx1250",
+    19: "gfx1030",
 }
 
 # Maps gfx arch to the default (SPX / full-GPU) CU count used when no live GPU is
@@ -39,6 +40,7 @@ GFX_MAP = {
 GFX_CU_NUM_MAP = {
     "gfx942": 304,  # MI300X (SPX, full GPU); MI308X shares gfx942 — use CU_NUM override
     "gfx950": 256,  # MI350
+    "gfx1030": 40,  # Radeon RX 6900 XT (Windows PyTorch-reported execution units)
     "gfx1100": 96,  # Radeon RX 7900 XTX
     "gfx1101": 60,  # Radeon RX 7800 XT
     "gfx1102": 32,  # Radeon RX 7600

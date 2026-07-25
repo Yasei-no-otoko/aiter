@@ -69,11 +69,12 @@ AITER is the **default kernel backend for LLM inference on AMD GPUs**, integrate
 | AMD Instinct MI325X | gfx942 (CDNA3) | Fully supported |
 | AMD Instinct MI350 | gfx950 (CDNA4) | Supported |
 | AMD Instinct MI355X | gfx950 (CDNA4) | Supported |
+| AMD Radeon RX 6900 XT | gfx1030 (RDNA2) | Experimental<sup>1</sup> |
 | AMD Pro W7900 | gfx1100 (RDNA3) | Experimental<sup>1</sup> |
 | AMD AI Max and Max Pro 400/300 Series | gfx1151 (RDNA3.5) | Experimental<sup>1</sup> |
 | AMD Radeon AI PRO R9700 | gfx1201 (RDNA4) | Experimental<sup>1</sup> |
 
-<sup>1</sup> On RDNA, Triton and most FlyDSL kernels run, as do most HIP kernels (norm, RoPE, quant, activation, plus some GEMM/attention). Most CK and ASM kernels are CDNA-only.
+<sup>1</sup> On RDNA, Triton and most FlyDSL kernels run, as do most HIP kernels (norm, RoPE, quant, activation, plus some GEMM/attention). Most CK and ASM kernels are CDNA-only. The gfx1030 CK FMHA forward path uses a software wave-shuffle/VALU fallback in place of hardware WMMA, so it prioritizes compatibility and correctness over performance.
 
 ## Operators
 
@@ -108,8 +109,12 @@ git submodule sync && git submodule update --init --recursive
 
 Windows keeps the Triton-only installation mode by default. To build the HIP
 and Composable Kernel extensions, opt in with `AITER_ENABLE_HIP=1`. Native GPU
-detection supports gfx1100 through gfx1103, gfx1151, and gfx1201; `GPU_ARCHS`
+detection supports gfx1030, gfx1100 through gfx1103, gfx1151, and gfx1201; `GPU_ARCHS`
 can be set explicitly for an offline or cross build.
+
+On gfx1030, CK FMHA forward is experimental and uses software matrix
+multiplication because RDNA2 has no WMMA instructions. Backward and other CK
+operators remain unsupported unless they explicitly advertise gfx1030 support.
 
 ```powershell
 $env:AITER_ENABLE_HIP = "1"

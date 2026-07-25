@@ -49,6 +49,12 @@ def cmdGenFunc_mha_fwd(
 
     md_name = "mha_fwd"
     filter = "*"
+    gfx = get_gfx()
+    if gfx == "gfx1030":
+        # The RDNA2 software-MMA path is intentionally built per head
+        # dimension so first use does not compile every CK FMHA specialization.
+        md_name += f"_d{q.shape[-1]}"
+        filter += f"d{q.shape[-1]}*"
     if q.dtype == dtypes.fp16:
         md_name += "_fp16"
         filter += "_fp16*"
@@ -95,6 +101,13 @@ def cmdGenFunc_mha_fwd(
         # only support per-tensor quantization for now
         md_name += "_pertensor"
         filter += "_pertensor*"
+    if gfx == "gfx1030":
+        if sink_ptr is None:
+            md_name += "_nsink"
+            filter += "_nsink*"
+        else:
+            md_name += "_sink"
+            filter += "_sink*"
 
     blob_gen_cmd = [
         f"{CK_DIR}/example/ck_tile/01_fmha/generate.py -d fwd "

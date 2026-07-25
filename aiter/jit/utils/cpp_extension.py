@@ -222,6 +222,24 @@ def _find_rocm_devel_include() -> Optional[str]:
     return None
 
 
+def _find_rocm_device_lib_path(rocm_home: Optional[str]) -> Optional[str]:
+    """Locate AMDGPU bitcode libraries in pip and conventional ROCm layouts."""
+    for env_name in ("HIP_DEVICE_LIB_PATH", "ROCM_DEVICE_LIB_PATH"):
+        candidate = os.environ.get(env_name)
+        if candidate and os.path.isfile(os.path.join(candidate, "ocml.bc")):
+            return candidate
+
+    if rocm_home:
+        for relative_path in (
+            os.path.join("lib", "llvm", "amdgcn", "bitcode"),
+            os.path.join("amdgcn", "bitcode"),
+        ):
+            candidate = os.path.join(rocm_home, relative_path)
+            if os.path.isfile(os.path.join(candidate, "ocml.bc")):
+                return candidate
+    return None
+
+
 def _join_rocm_home(*paths) -> str:
     """
     Join paths with ROCM_HOME, or raises an error if it ROCM_HOME is not set.
@@ -272,6 +290,14 @@ with compiling PyTorch from source.
 
 HIP_VERSION = get_hip_version()
 ROCM_HOME = _find_rocm_home()
+ROCM_DEVICE_LIB_PATH = _find_rocm_device_lib_path(ROCM_HOME)
+if IS_WINDOWS and ROCM_HOME:
+    # Keep hipcc from falling back to an older HIP_PATH_<version> install.
+    os.environ.setdefault("HIP_PATH", ROCM_HOME)
+    os.environ.setdefault("HIP_HOME", ROCM_HOME)
+    if ROCM_DEVICE_LIB_PATH:
+        # hipcc from the pip SDK does not infer its sibling bitcode directory.
+        os.environ.setdefault("HIP_DEVICE_LIB_PATH", ROCM_DEVICE_LIB_PATH)
 HIP_HOME = _join_rocm_home("hip") if ROCM_HOME else None
 IS_HIP_EXTENSION = (
     True if ((ROCM_HOME is not None) and (HIP_VERSION is not None)) else False
@@ -414,6 +440,9 @@ def check_compiler_ok_for_platform(compiler: str) -> bool:
     if not compiler_path:
         return False
 
+    if IS_WINDOWS:
+        return True
+
     # Check the compiler name
     if any(name in compiler_path for name in _accepted_compilers_for_platform()):
         return True
@@ -475,6 +504,11 @@ def get_compiler_abi_compatibility_and_version(
             )
         )
         return (False, Version("0.0.0"))
+
+    if IS_WINDOWS:
+        # MSVC's `cl -v` exits with code 2 even though the compiler is valid.
+        # PyTorch extensions on Windows share the process ABI, so accept it.
+        return (True, Version("0.0.0"))
 
     try:
         if IS_LINUX:
@@ -1585,7 +1619,7 @@ def _get_rocm_arch_flags(cflags: Optional[List[str]] = None) -> List[str]:
                 return ["-fno-gpu-rdc"]
     # Use same defaults as used for building PyTorch
     # Allow env var to override, just like during initial cmake build.
-    _archs = os.environ.get("PYTORCH_ROCM_ARCH", None)
+    _archs = os.environ.get("PYTORCH_ROCM_ARCH") or os.environ.get("GPU_ARCHS")
     if not _archs:
         import torch
 
